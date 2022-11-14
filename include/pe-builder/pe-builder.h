@@ -21,19 +21,29 @@ public:
   // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::FileAlignment.
   pe_builder& file_alignment(std::uint32_t alignment);
 
-  // Set the image base.
+  // Set the image base address.
   // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::ImageBase.
   pe_builder& image_base(std::uint64_t address);
 
-  // Set the entrypoint.
+  // Set the entrypoint address.
   // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::AddressOfEntryPoint.
   pe_builder& entrypoint(std::uint64_t address);
 
+  // Set the subsystem type.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::Subsystem.
+  pe_builder& subsystem(std::uint16_t value);
+
+  // Set the file characteristics.
+  // This directly corresponds to IMAGE_NT_HEADERS::FileHeader::Characteristics.
+  pe_builder& file_characteristics(std::uint16_t value);
+
 private:
-  std::uint32_t section_alignment_ = 0x1000;
-  std::uint32_t file_alignment_    = 0x200;
-  std::uint64_t image_base_        = 0x140000000;
-  std::uint64_t entrypoint_        = 0x0;
+  std::uint32_t section_alignment_    = 0x1000;
+  std::uint32_t file_alignment_       = 0x200;
+  std::uint64_t image_base_           = 0x140000000;
+  std::uint64_t entrypoint_           = 0x0;
+  std::uint16_t subsystem_            = IMAGE_SUBSYSTEM_WINDOWS_CUI;
+  std::uint16_t file_characteristics_ = IMAGE_FILE_EXECUTABLE_IMAGE;
 
 private:
   // Write the PE image to a buffer
@@ -79,17 +89,31 @@ inline pe_builder& pe_builder::file_alignment(std::uint32_t const alignment) {
   return *this;
 }
 
-// Set the image base.
+// Set the image base address.
 // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::ImageBase.
 inline pe_builder& pe_builder::image_base(std::uint64_t const address) {
   image_base_ = address;
   return *this;
 }
 
-// Set the entrypoint.
+// Set the entrypoint address.
 // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::AddressOfEntryPoint.
 inline pe_builder& pe_builder::entrypoint(std::uint64_t const address) {
   entrypoint_ = address;
+  return *this;
+}
+
+// Set the subsystem type.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::Subsystem.
+inline pe_builder& pe_builder::subsystem(std::uint16_t const value) {
+  subsystem_ = value;
+  return *this;
+}
+
+// Set the file characteristics.
+// This directly corresponds to IMAGE_NT_HEADERS::FileHeader::Characteristics.
+inline pe_builder& pe_builder::file_characteristics(std::uint16_t const value) {
+  file_characteristics_ = value;
   return *this;
 }
 
@@ -138,7 +162,7 @@ inline void pe_builder::write_nt_header(PIMAGE_NT_HEADERS64 const nt_header,
   nt_header->FileHeader.Machine                         = IMAGE_FILE_MACHINE_AMD64;
   nt_header->FileHeader.NumberOfSections                = 1;
   nt_header->FileHeader.SizeOfOptionalHeader            = sizeof(nt_header->OptionalHeader);
-  nt_header->FileHeader.Characteristics                 = IMAGE_FILE_EXECUTABLE_IMAGE;
+  nt_header->FileHeader.Characteristics                 = file_characteristics_;
   nt_header->OptionalHeader.Magic                       = IMAGE_NT_OPTIONAL_HDR64_MAGIC;
   nt_header->OptionalHeader.AddressOfEntryPoint         = entrypoint_;
   nt_header->OptionalHeader.ImageBase                   = image_base_;
@@ -148,7 +172,7 @@ inline void pe_builder::write_nt_header(PIMAGE_NT_HEADERS64 const nt_header,
   nt_header->OptionalHeader.MinorOperatingSystemVersion = 0;
   nt_header->OptionalHeader.MajorSubsystemVersion       = 6;
   nt_header->OptionalHeader.MinorSubsystemVersion       = 0;
-  nt_header->OptionalHeader.Subsystem                   = IMAGE_SUBSYSTEM_WINDOWS_CUI;
+  nt_header->OptionalHeader.Subsystem                   = subsystem_;
   nt_header->OptionalHeader.DllCharacteristics          = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
     | IMAGE_DLLCHARACTERISTICS_NX_COMPAT | IMAGE_DLLCHARACTERISTICS_NO_SEH;
   nt_header->OptionalHeader.SizeOfStackReserve          = 0x10000;
