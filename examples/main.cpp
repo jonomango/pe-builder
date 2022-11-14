@@ -4,6 +4,11 @@
 int main() {
   pb::pe_builder pe;
 
+  pe.section_alignment(0x1000)
+    .file_alignment(0x200)
+    .image_base(0x140000000)
+    .entrypoint(0x140000000);
+
   if (!pe.write("fish-frog.exe"))
     printf("Failed to write PE image.\n");
   else

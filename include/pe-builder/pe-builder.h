@@ -13,9 +13,25 @@ public:
   // Write the PE image to a file
   bool write(char const* path) const;
 
+  // Set the section alignment.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::SectionAlignment.
+  pe_builder& section_alignment(std::uint32_t alignment);
+
+  // Set the file alignment.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::FileAlignment.
+  pe_builder& file_alignment(std::uint32_t alignment);
+
+  // Set the image base.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::ImageBase.
+  pe_builder& image_base(std::uint64_t address);
+
+  // Set the entrypoint.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::AddressOfEntryPoint.
+  pe_builder& entrypoint(std::uint64_t address);
+
 private:
-  std::uint32_t file_alignment_    = 0x200;
   std::uint32_t section_alignment_ = 0x1000;
+  std::uint32_t file_alignment_    = 0x200;
   std::uint64_t image_base_        = 0x140000000;
   std::uint64_t entrypoint_        = 0x0;
 
@@ -35,7 +51,7 @@ private:
 };
 
 // Write the PE image to a file
-bool pe_builder::write(char const* const path) const {
+inline bool pe_builder::write(char const* const path) const {
   auto const contents = write_buffer(path);
   if (contents.empty())
     return false;
@@ -49,8 +65,36 @@ bool pe_builder::write(char const* const path) const {
   return true;
 }
 
+// Set the section alignment.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::SectionAlignment.
+inline pe_builder& pe_builder::section_alignment(std::uint32_t const alignment) {
+  section_alignment_ = alignment;
+  return *this;
+}
+
+// Set the file alignment.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::FileAlignment.
+inline pe_builder& pe_builder::file_alignment(std::uint32_t const alignment) {
+  file_alignment_ = alignment;
+  return *this;
+}
+
+// Set the image base.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::ImageBase.
+inline pe_builder& pe_builder::image_base(std::uint64_t const address) {
+  image_base_ = address;
+  return *this;
+}
+
+// Set the entrypoint.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::AddressOfEntryPoint.
+inline pe_builder& pe_builder::entrypoint(std::uint64_t const address) {
+  entrypoint_ = address;
+  return *this;
+}
+
 // Write the PE image to a buffer
-std::vector<std::uint8_t> pe_builder::write_buffer(char const* const path) const {
+inline std::vector<std::uint8_t> pe_builder::write_buffer(char const* const path) const {
   constexpr auto num_sections = 5;
 
   // This is the initial file size of the image, before we start adding the
@@ -80,14 +124,14 @@ std::vector<std::uint8_t> pe_builder::write_buffer(char const* const path) const
 }
 
 // Fill in the DOS header.
-void pe_builder::write_dos_header(PIMAGE_DOS_HEADER const dos_header) const {
+inline void pe_builder::write_dos_header(PIMAGE_DOS_HEADER const dos_header) const {
   std::memset(dos_header, 0, sizeof(*dos_header));
   dos_header->e_magic  = IMAGE_DOS_SIGNATURE;
   dos_header->e_lfanew = sizeof(IMAGE_DOS_HEADER);
 }
 
 // Fill in the NT header.
-void pe_builder::write_nt_header(PIMAGE_NT_HEADERS64 const nt_header,
+inline void pe_builder::write_nt_header(PIMAGE_NT_HEADERS64 const nt_header,
     std::uint32_t const image_size, std::uint32_t const headers_size) const {
   std::memset(nt_header, 0, sizeof(*nt_header));
   nt_header->Signature                                  = IMAGE_NT_SIGNATURE;
@@ -118,7 +162,7 @@ void pe_builder::write_nt_header(PIMAGE_NT_HEADERS64 const nt_header,
 }
 
 // Align an integer up to the specified alignment.
-std::uint64_t pe_builder::align_integer(
+inline std::uint64_t pe_builder::align_integer(
     std::uint64_t const value, std::uint64_t const alignment) {
   auto const r = value % alignment;
 
