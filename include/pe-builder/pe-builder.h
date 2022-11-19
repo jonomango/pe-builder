@@ -48,6 +48,9 @@ public:
   // Write the PE image to a file
   bool write(char const* path) const;
 
+  // Write the PE image to a buffer.
+  std::vector<std::uint8_t> write() const;
+
   // Set the section alignment.
   // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::SectionAlignment.
   pe_builder& section_alignment(std::uint32_t alignment);
@@ -96,9 +99,6 @@ private:
   std::deque<pe_section> sections_ = {};
 
 private:
-  // Write the PE image to a buffer
-  std::vector<std::uint8_t> write_buffer(char const* path) const;
-
   // Fill in the DOS header.
   void write_dos_header(PIMAGE_DOS_HEADER dos_header) const;
 
@@ -146,7 +146,7 @@ inline std::vector<std::uint8_t>& pe_section::data() {
 
 // Write the PE image to a file
 inline bool pe_builder::write(char const* const path) const {
-  auto const contents = write_buffer(path);
+  auto const contents = write();
   if (contents.empty())
     return false;
 
@@ -157,6 +157,69 @@ inline bool pe_builder::write(char const* const path) const {
   file.write(reinterpret_cast<char const*>(contents.data()), contents.size());
 
   return true;
+}
+
+// Write the PE image to a buffer.
+inline std::vector<std::uint8_t> pe_builder::write() const {
+  // This is the initial file size of the image, before we start adding the
+  // raw section data. This value is aligned to the file alignment.
+  auto const headers_size = align_integer(
+    compute_headers_size(sections_.size()), file_alignment_);
+
+  // Allocate a vector with enough space for the MS-DOS header, the PE header,
+  // and the section headers.
+  std::vector<std::uint8_t> contents(headers_size, 0);
+
+  std::uint64_t current_rva = align_integer(
+    static_cast<std::uint32_t>(headers_size), section_alignment_);
+
+  auto const section_hdrs = reinterpret_cast<PIMAGE_SECTION_HEADER>(
+    &contents[sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_NT_HEADERS64)]);
+
+  for (std::size_t i = 0; i < sections_.size(); ++i) {
+    auto const& sec = sections_[i];
+
+    assert(virtual_address(sec) == current_rva + image_base_);
+
+    // This needs to be computed everytime since we're using a vector and it can resize.
+    auto& hdr = reinterpret_cast<PIMAGE_SECTION_HEADER>(
+      &contents[sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_NT_HEADERS64)])[i];
+
+    std::memset(&hdr, 0, sizeof(hdr));
+    std::memcpy(hdr.Name, sec.name_, 8);
+    hdr.Characteristics  = sec.characteristics_;
+    hdr.VirtualAddress   = static_cast<std::uint32_t>(current_rva);
+    hdr.Misc.VirtualSize = static_cast<std::uint32_t>(sec.data_.size() + sec.padding_);
+    hdr.SizeOfRawData    = static_cast<std::uint32_t>(
+      align_integer(sec.data_.size(), file_alignment_));
+    hdr.PointerToRawData = static_cast<std::uint32_t>(contents.size());
+
+    // This needs to be stored before we add to the buffer.
+    auto const aligned_size = hdr.SizeOfRawData;
+
+    // Append the section data to the buffer.
+    contents.insert(end(contents), begin(sec.data_), end(sec.data_));
+
+    // We need to add padding so that we're aligned to the file alignment.
+    if (aligned_size > sec.data_.size())
+      contents.insert(end(contents), aligned_size - sec.data_.size(), 0);
+
+    // This is how much virtual padding we need (since we added some real
+    // padding when aligning to file alignment).
+    auto const virtual_padding = sec.padding_ - (aligned_size - sec.data_.size());
+
+    current_rva = align_integer(current_rva
+      + aligned_size + virtual_padding, section_alignment_);
+  }
+
+  // Write the headers to the buffer.
+  write_dos_header(reinterpret_cast<PIMAGE_DOS_HEADER>(&contents[0]));
+  write_nt_header(reinterpret_cast<PIMAGE_NT_HEADERS64>(
+    &contents[sizeof(IMAGE_DOS_HEADER)]),
+    static_cast<std::uint32_t>(current_rva),
+    static_cast<std::uint32_t>(headers_size));
+
+  return contents;
 }
 
 // Set the section alignment.
@@ -242,69 +305,6 @@ inline std::size_t pe_builder::sections_until_resize() const {
   auto const unaligned_hdr_size = compute_headers_size(sections_.size());
   return (align_integer(unaligned_hdr_size, section_alignment_)
     - unaligned_hdr_size) / sizeof(IMAGE_SECTION_HEADER);
-}
-
-// Write the PE image to a buffer
-inline std::vector<std::uint8_t> pe_builder::write_buffer(char const* const path) const {
-  // This is the initial file size of the image, before we start adding the
-  // raw section data. This value is aligned to the file alignment.
-  auto const headers_size = align_integer(
-    compute_headers_size(sections_.size()), file_alignment_);
-
-  // Allocate a vector with enough space for the MS-DOS header, the PE header,
-  // and the section headers.
-  std::vector<std::uint8_t> contents(headers_size, 0);
-
-  std::uint64_t current_rva = align_integer(
-    static_cast<std::uint32_t>(headers_size), section_alignment_);
-
-  auto const section_hdrs = reinterpret_cast<PIMAGE_SECTION_HEADER>(
-    &contents[sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_NT_HEADERS64)]);
-
-  for (std::size_t i = 0; i < sections_.size(); ++i) {
-    auto const& sec = sections_[i];
-
-    assert(virtual_address(sec) == current_rva + image_base_);
-
-    // This needs to be computed everytime since we're using a vector and it can resize.
-    auto& hdr = reinterpret_cast<PIMAGE_SECTION_HEADER>(
-      &contents[sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_NT_HEADERS64)])[i];
-
-    std::memset(&hdr, 0, sizeof(hdr));
-    std::memcpy(hdr.Name, sec.name_, 8);
-    hdr.Characteristics  = sec.characteristics_;
-    hdr.VirtualAddress   = static_cast<std::uint32_t>(current_rva);
-    hdr.Misc.VirtualSize = static_cast<std::uint32_t>(sec.data_.size() + sec.padding_);
-    hdr.SizeOfRawData    = static_cast<std::uint32_t>(
-      align_integer(sec.data_.size(), file_alignment_));
-    hdr.PointerToRawData = static_cast<std::uint32_t>(contents.size());
-
-    // This needs to be stored before we add to the buffer.
-    auto const aligned_size = hdr.SizeOfRawData;
-
-    // Append the section data to the buffer.
-    contents.insert(end(contents), begin(sec.data_), end(sec.data_));
-
-    // We need to add padding so that we're aligned to the file alignment.
-    if (aligned_size > sec.data_.size())
-      contents.insert(end(contents), aligned_size - sec.data_.size(), 0);
-
-    // This is how much virtual padding we need (since we added some real
-    // padding when aligning to file alignment).
-    auto const virtual_padding = sec.padding_ - (aligned_size - sec.data_.size());
-
-    current_rva = align_integer(current_rva
-      + aligned_size + virtual_padding, section_alignment_);
-  }
-
-  // Write the headers to the buffer.
-  write_dos_header(reinterpret_cast<PIMAGE_DOS_HEADER>(&contents[0]));
-  write_nt_header(reinterpret_cast<PIMAGE_NT_HEADERS64>(
-    &contents[sizeof(IMAGE_DOS_HEADER)]),
-    static_cast<std::uint32_t>(current_rva),
-    static_cast<std::uint32_t>(headers_size));
-
-  return contents;
 }
 
 // Fill in the DOS header.
