@@ -4,6 +4,7 @@
 #include <vector>
 #include <deque>
 #include <cstring>
+#include <assert.h>
 
 #include <Windows.h>
 
@@ -218,13 +219,16 @@ inline std::uint64_t pe_builder::virtual_address(pe_section const& section) cons
     static_cast<std::uint32_t>(headers_size), section_alignment_);
 
   for (std::size_t i = 0; i < sections_.size(); ++i) {
-    if (i == section.section_idx_) {
+    if (i == section.section_idx_)
       return image_base_ + current_rva;
-    }
+
+    auto const& sec = sections_[i];
+
+    auto const aligned_size = align_integer(sec.data_.size(), file_alignment_);
+    auto const virtual_padding = sec.padding_ - (aligned_size - sec.data_.size());
     
-    current_rva = align_integer(current_rva
-      + align_integer(sections_[i].data_.size(), file_alignment_)
-      + sections_[i].padding_, section_alignment_);
+    current_rva = align_integer(current_rva +
+      aligned_size + virtual_padding, section_alignment_);
   }
 
   return 0;
@@ -259,13 +263,13 @@ inline std::vector<std::uint8_t> pe_builder::write_buffer(char const* const path
   for (std::size_t i = 0; i < sections_.size(); ++i) {
     auto const& sec = sections_[i];
 
+    assert(virtual_address(sec) == current_rva + image_base_);
+
     // This needs to be computed everytime since we're using a vector and it can resize.
     auto& hdr = reinterpret_cast<PIMAGE_SECTION_HEADER>(
       &contents[sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_NT_HEADERS64)])[i];
+
     std::memset(&hdr, 0, sizeof(hdr));
-
-    // Need to add padding so that RawData is a multiple of FileAlignment.
-
     std::memcpy(hdr.Name, sec.name_, 8);
     hdr.Characteristics  = sec.characteristics_;
     hdr.VirtualAddress   = static_cast<std::uint32_t>(current_rva);
@@ -284,8 +288,12 @@ inline std::vector<std::uint8_t> pe_builder::write_buffer(char const* const path
     if (aligned_size > sec.data_.size())
       contents.insert(end(contents), aligned_size - sec.data_.size(), 0);
 
+    // This is how much virtual padding we need (since we added some real
+    // padding when aligning to file alignment).
+    auto const virtual_padding = sec.padding_ - (aligned_size - sec.data_.size());
+
     current_rva = align_integer(current_rva
-      + aligned_size + sec.padding_, section_alignment_);
+      + aligned_size + virtual_padding, section_alignment_);
   }
 
   // Write the headers to the buffer.
