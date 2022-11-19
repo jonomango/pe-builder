@@ -78,6 +78,12 @@ public:
   // Compute the virtual address of a section.
   std::uint64_t virtual_address(pe_section const& section) const;
 
+  // Return the remaining number of sections that can be added until the
+  // image header is resized (which will invalidate all previously computed
+  // section virtual addresses. This value is usually way more than enough
+  // unless you use a low section alignment.
+  std::size_t sections_until_resize() const;
+
 private:
   std::uint32_t section_alignment_    = 0x1000;
   std::uint32_t file_alignment_       = 0x200;
@@ -99,6 +105,9 @@ private:
   // Fill in the NT header.
   void write_nt_header(PIMAGE_NT_HEADERS64 nt_header,
     std::uint32_t image_size, std::uint32_t headers_size) const;
+
+  // Compute the (unaligned) headers size.
+  static std::size_t compute_headers_size(std::size_t num_sections);
 
   // Align an integer up to the specified alignment.
   static std::uint64_t align_integer(std::uint64_t value, std::uint64_t alignment);
@@ -203,17 +212,8 @@ inline pe_section& pe_builder::section() {
 inline std::uint64_t pe_builder::virtual_address(pe_section const& section) const {
   // This is the initial file size of the image, before we start adding the
   // raw section data. This value is aligned to the file alignment.
-  std::size_t headers_size = 0;
-
-  headers_size += sizeof(IMAGE_DOS_HEADER);
-  headers_size += sizeof(IMAGE_NT_HEADERS64);
-
-  // Each data block has its own section, while code blocks are all stored
-  // in a single section.
-  headers_size += sizeof(IMAGE_SECTION_HEADER) * sections_.size();
-
-  // Align to the file alignment.
-  headers_size = align_integer(headers_size, file_alignment_);
+  auto const headers_size = align_integer(
+    compute_headers_size(sections_.size()), file_alignment_);
 
   std::uint64_t current_rva = align_integer(
     static_cast<std::uint32_t>(headers_size), section_alignment_);
@@ -234,21 +234,22 @@ inline std::uint64_t pe_builder::virtual_address(pe_section const& section) cons
   return 0;
 }
 
+// Return the remaining number of sections that can be added until the
+// image header is resized (which will invalidate all previously computed
+// section virtual addresses. This value is usually way more than enough
+// unless you use a low section alignment.
+inline std::size_t pe_builder::sections_until_resize() const {
+  auto const unaligned_hdr_size = compute_headers_size(sections_.size());
+  return (align_integer(unaligned_hdr_size, section_alignment_)
+    - unaligned_hdr_size) / sizeof(IMAGE_SECTION_HEADER);
+}
+
 // Write the PE image to a buffer
 inline std::vector<std::uint8_t> pe_builder::write_buffer(char const* const path) const {
   // This is the initial file size of the image, before we start adding the
   // raw section data. This value is aligned to the file alignment.
-  std::size_t headers_size = 0;
-
-  headers_size += sizeof(IMAGE_DOS_HEADER);
-  headers_size += sizeof(IMAGE_NT_HEADERS64);
-
-  // Each data block has its own section, while code blocks are all stored
-  // in a single section.
-  headers_size += sizeof(IMAGE_SECTION_HEADER) * sections_.size();
-
-  // Align to the file alignment.
-  headers_size = align_integer(headers_size, file_alignment_);
+  auto const headers_size = align_integer(
+    compute_headers_size(sections_.size()), file_alignment_);
 
   // Allocate a vector with enough space for the MS-DOS header, the PE header,
   // and the section headers.
@@ -342,6 +343,15 @@ inline void pe_builder::write_nt_header(PIMAGE_NT_HEADERS64 const nt_header,
   nt_header->OptionalHeader.NumberOfRvaAndSizes         = 16;
   nt_header->OptionalHeader.SizeOfImage                 = image_size;
   nt_header->OptionalHeader.SizeOfHeaders               = headers_size;
+}
+
+// Compute the (unaligned) headers size.
+inline std::size_t pe_builder::compute_headers_size(std::size_t const num_sections) {
+  // This value might get more complicated if we decide to include a proper
+  // DOS header (and DOS stub).
+  return sizeof(IMAGE_DOS_HEADER) +
+    sizeof(IMAGE_NT_HEADERS64) +
+    sizeof(IMAGE_SECTION_HEADER) * num_sections;
 }
 
 // Align an integer up to the specified alignment.

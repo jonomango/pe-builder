@@ -10,10 +10,12 @@ int main() {
     .subsystem(IMAGE_SUBSYSTEM_WINDOWS_CUI)
     .file_characteristics(IMAGE_FILE_EXECUTABLE_IMAGE);
 
+  printf("Remaining sections: %zX.\n", pe.sections_until_resize());
+
   auto& text_sec = pe.section()
     .name(".text")
     .characteristics(IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_EXECUTE);
-  
+
   text_sec.data().push_back(0xAA);
   text_sec.data().push_back(0xBB);
 
