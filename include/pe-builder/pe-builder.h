@@ -78,8 +78,15 @@ public:
   // Append a new section to the PE image.
   pe_section& section();
 
+  // Set the RVA and size of the specified data directory.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::DataDirectory[idx].
+  pe_builder& data_directory(std::size_t idx, std::uint32_t rva, std::uint32_t size);
+
   // Compute the virtual address of a section.
   std::uint64_t virtual_address(pe_section const& section) const;
+
+  // Compute the RVA of a section.
+  std::uint32_t rvirtual_address(pe_section const& section) const;
 
   // Return the remaining number of sections that can be added until the
   // image header is resized (which will invalidate all previously computed
@@ -88,12 +95,13 @@ public:
   std::size_t sections_until_resize() const;
 
 private:
-  std::uint32_t section_alignment_    = 0x1000;
-  std::uint32_t file_alignment_       = 0x200;
-  std::uint64_t image_base_           = 0x140000000;
-  std::uint64_t entrypoint_           = 0x0;
-  std::uint16_t subsystem_            = IMAGE_SUBSYSTEM_WINDOWS_CUI;
-  std::uint16_t file_characteristics_ = IMAGE_FILE_EXECUTABLE_IMAGE;
+  std::uint32_t section_alignment_           = 0x1000;
+  std::uint32_t file_alignment_              = 0x200;
+  std::uint64_t image_base_                  = 0x140000000;
+  std::uint64_t entrypoint_                  = 0x0;
+  std::uint16_t subsystem_                   = IMAGE_SUBSYSTEM_WINDOWS_CUI;
+  std::uint16_t file_characteristics_        = IMAGE_FILE_EXECUTABLE_IMAGE;
+  IMAGE_DATA_DIRECTORY data_directories_[16] = { 0 };
 
   // We need to use a deque so we don't invalidate any iterators.
   std::deque<pe_section> sections_ = {};
@@ -179,7 +187,7 @@ inline std::vector<std::uint8_t> pe_builder::write() const {
   for (std::size_t i = 0; i < sections_.size(); ++i) {
     auto const& sec = sections_[i];
 
-    assert(virtual_address(sec) == current_rva + image_base_);
+    assert(rvirtual_address(sec) == current_rva);
 
     // This needs to be computed everytime since we're using a vector and it can resize.
     auto& hdr = reinterpret_cast<PIMAGE_SECTION_HEADER>(
@@ -271,27 +279,41 @@ inline pe_section& pe_builder::section() {
   return sec;
 }
 
+// Set the RVA and size of the specified data directory.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::DataDirectory[idx].
+inline pe_builder& pe_builder::data_directory(std::size_t const idx,
+    std::uint32_t const rva, std::uint32_t const size) {
+  assert(idx < 16);
+  data_directories_[idx] = { rva, size };
+  return *this;
+}
+
 // Compute the virtual address of a section.
 inline std::uint64_t pe_builder::virtual_address(pe_section const& section) const {
+  return rvirtual_address(section) + image_base_;
+}
+
+// Compute the RVA of a section.
+inline std::uint32_t pe_builder::rvirtual_address(pe_section const& section) const {
   // This is the initial file size of the image, before we start adding the
   // raw section data. This value is aligned to the file alignment.
   auto const headers_size = align_integer(
     compute_headers_size(sections_.size()), file_alignment_);
 
-  std::uint64_t current_rva = align_integer(
-    static_cast<std::uint32_t>(headers_size), section_alignment_);
+  std::uint32_t current_rva = static_cast<std::uint32_t>(align_integer(
+    static_cast<std::uint32_t>(headers_size), section_alignment_));
 
   for (std::size_t i = 0; i < sections_.size(); ++i) {
     if (i == section.section_idx_)
-      return image_base_ + current_rva;
+      return current_rva;
 
     auto const& sec = sections_[i];
 
     auto const aligned_size = align_integer(sec.data_.size(), file_alignment_);
     auto const virtual_padding = sec.padding_ - (aligned_size - sec.data_.size());
-    
-    current_rva = align_integer(current_rva +
-      aligned_size + virtual_padding, section_alignment_);
+
+    current_rva = static_cast<std::uint32_t>(align_integer(current_rva +
+      aligned_size + virtual_padding, section_alignment_));
   }
 
   return 0;
@@ -343,6 +365,10 @@ inline void pe_builder::write_nt_header(PIMAGE_NT_HEADERS64 const nt_header,
   nt_header->OptionalHeader.NumberOfRvaAndSizes         = 16;
   nt_header->OptionalHeader.SizeOfImage                 = image_size;
   nt_header->OptionalHeader.SizeOfHeaders               = headers_size;
+
+  // Copy the data directories over.
+  std::memcpy(nt_header->OptionalHeader.DataDirectory,
+    data_directories_, sizeof(data_directories_));
 }
 
 // Compute the (unaligned) headers size.
