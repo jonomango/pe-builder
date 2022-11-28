@@ -55,25 +55,49 @@ public:
   // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::SectionAlignment.
   pe_builder& section_alignment(std::uint32_t alignment);
 
+  // Get the section alignment.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::SectionAlignment.
+  std::uint32_t section_alignment() const;
+
   // Set the file alignment.
   // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::FileAlignment.
   pe_builder& file_alignment(std::uint32_t alignment);
+
+  // Get the file alignment.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::FileAlignment.
+  std::uint32_t file_alignment() const;
 
   // Set the image base address.
   // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::ImageBase.
   pe_builder& image_base(std::uint64_t address);
 
+  // Get the image base address.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::ImageBase.
+  std::uint64_t image_base() const;
+
   // Set the entrypoint address.
   // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::AddressOfEntryPoint.
   pe_builder& entrypoint(std::uint64_t address);
+
+  // Get the entrypoint address.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::AddressOfEntryPoint.
+  std::uint64_t entrypoint() const;
 
   // Set the subsystem type.
   // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::Subsystem.
   pe_builder& subsystem(std::uint16_t value);
 
+  // Get the subsystem type.
+  // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::Subsystem.
+  std::uint16_t subsystem() const;
+
   // Set the file characteristics.
   // This directly corresponds to IMAGE_NT_HEADERS::FileHeader::Characteristics.
   pe_builder& file_characteristics(std::uint16_t value);
+
+  // Get the file characteristics.
+  // This directly corresponds to IMAGE_NT_HEADERS::FileHeader::Characteristics.
+  std::uint16_t file_characteristics() const;
 
   // Append a new section to the PE image.
   pe_section& section();
@@ -237,11 +261,23 @@ inline pe_builder& pe_builder::section_alignment(std::uint32_t const alignment) 
   return *this;
 }
 
+// Get the section alignment.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::SectionAlignment.
+inline std::uint32_t pe_builder::section_alignment() const {
+  return section_alignment_;
+}
+
 // Set the file alignment.
 // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::FileAlignment.
 inline pe_builder& pe_builder::file_alignment(std::uint32_t const alignment) {
   file_alignment_ = alignment;
   return *this;
+}
+
+// Get the file alignment.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::FileAlignment.
+inline std::uint32_t pe_builder::file_alignment() const {
+  return file_alignment_;
 }
 
 // Set the image base address.
@@ -251,11 +287,23 @@ inline pe_builder& pe_builder::image_base(std::uint64_t const address) {
   return *this;
 }
 
+// Get the image base address.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::ImageBase.
+inline std::uint64_t pe_builder::image_base() const {
+  return image_base_;
+}
+
 // Set the entrypoint address.
 // This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::AddressOfEntryPoint.
 inline pe_builder& pe_builder::entrypoint(std::uint64_t const address) {
   entrypoint_ = address;
   return *this;
+}
+
+// Get the entrypoint address.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::AddressOfEntryPoint.
+inline std::uint64_t pe_builder::entrypoint() const {
+  return entrypoint_;
 }
 
 // Set the subsystem type.
@@ -265,11 +313,23 @@ inline pe_builder& pe_builder::subsystem(std::uint16_t const value) {
   return *this;
 }
 
+// Get the subsystem type.
+// This directly corresponds to IMAGE_NT_HEADERS::OptionalHeader::Subsystem.
+inline std::uint16_t pe_builder::subsystem() const {
+  return subsystem_;
+}
+
 // Set the file characteristics.
 // This directly corresponds to IMAGE_NT_HEADERS::FileHeader::Characteristics.
 inline pe_builder& pe_builder::file_characteristics(std::uint16_t const value) {
   file_characteristics_ = value;
   return *this;
+}
+
+// Get the file characteristics.
+// This directly corresponds to IMAGE_NT_HEADERS::FileHeader::Characteristics.
+inline std::uint16_t pe_builder::file_characteristics() const {
+  return file_characteristics_;
 }
 
 // Append a new section to the PE image.
